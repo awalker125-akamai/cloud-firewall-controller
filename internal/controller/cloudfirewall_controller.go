@@ -21,7 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
@@ -29,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -168,6 +168,7 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 //+kubebuilder:rbac:groups="",namespace=kube-system,resourceNames=linode,resources=secrets,verbs=get;list;watch
 
 func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	klog.Infof("ANDY")
 	_ = log.FromContext(ctx)
 	var original alpha1v1.CloudFirewall
 	var cf alpha1v1.CloudFirewall
@@ -710,13 +711,39 @@ func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOpti
 	if len(apiKey) == 0 {
 		return fmt.Errorf("failed to parse Linode API token")
 	}
-	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
-	oauth2Client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-		},
+
+	// region, ok := creds.Data["region"]
+	// if !ok {
+	// 	return fmt.Errorf("linode API token secret missing 'region' data")
+	// }
+
+	// tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
+	// oauth2Client := &http.Client{
+	// 	Transport: &oauth2.Transport{
+	// 		Source: tokenSource,
+	// 	},
+	// }
+
+	r.lcli = lgo.NewClient(nil)
+	r.lcli.SetToken(string(apiKey))
+
+	certPath, certPathExists := os.LookupEnv("LINODE_CA")
+
+	if certPathExists {
+		cert, err := os.ReadFile(filepath.Clean(certPath))
+		if err != nil {
+			fmt.Errorf("[ERROR] Error when reading cert at %s: %s\n", certPath, err.Error())
+		}
+
+		klog.Infof("ANDY2")
+		r.lcli.SetRootCertificate(certPath)
+		if opts.Debug {
+			klog.Infof("[DEBUG] Set API root certificate to %s with contents %s\n", certPath, cert)
+		}
+	} else {
+		klog.Infof("ANDY3")
 	}
-	r.lcli = lgo.NewClient(oauth2Client)
+
 	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
 	r.lcli.SetDebug(opts.Debug)
 	return

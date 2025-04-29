@@ -168,7 +168,6 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 //+kubebuilder:rbac:groups="",namespace=kube-system,resourceNames=linode,resources=secrets,verbs=get;list;watch
 
 func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	klog.Infof("ANDY")
 	_ = log.FromContext(ctx)
 	var original alpha1v1.CloudFirewall
 	var cf alpha1v1.CloudFirewall
@@ -711,40 +710,30 @@ func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOpti
 	if len(apiKey) == 0 {
 		return fmt.Errorf("failed to parse Linode API token")
 	}
-
-	// region, ok := creds.Data["region"]
-	// if !ok {
-	// 	return fmt.Errorf("linode API token secret missing 'region' data")
-	// }
-
 	// tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
 	// oauth2Client := &http.Client{
 	// 	Transport: &oauth2.Transport{
 	// 		Source: tokenSource,
 	// 	},
 	// }
-
 	r.lcli = lgo.NewClient(nil)
 	r.lcli.SetToken(string(apiKey))
+	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
+	r.lcli.SetDebug(opts.Debug)
 
-	certPath, certPathExists := os.LookupEnv("LINODE_CA")
+	certPath, certPathExists := os.LookupEnv(lgo.APIHostCert)
 
 	if certPathExists {
 		cert, err := os.ReadFile(filepath.Clean(certPath))
 		if err != nil {
-			fmt.Errorf("[ERROR] Error when reading cert at %s: %s\n", certPath, err.Error())
+			return fmt.Errorf("[ERROR] Error when reading cert at %s: %s", certPath, err.Error())
 		}
-
-		klog.Infof("ANDY2")
-		r.lcli.SetRootCertificate(certPath)
 		if opts.Debug {
 			klog.Infof("[DEBUG] Set API root certificate to %s with contents %s\n", certPath, cert)
 		}
-	} else {
-		klog.Infof("ANDY3")
+
+		r.lcli.SetRootCertificate(certPath)
 	}
 
-	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
-	r.lcli.SetDebug(opts.Debug)
 	return
 }
